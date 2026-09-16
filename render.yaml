@@ -22,7 +22,4 @@ services:
     startCommand: npx next start --hostname 0.0.0.0 --port $PORT
     envVars:
       - key: ARGO_API_URL
-        fromService:
-          name: floatx-api
-          type: web
-          property: host
+        value: https://floatx-api.onrender.com
