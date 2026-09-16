@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import './mobile.css';
 
 export const metadata: Metadata = {
   title: 'FLOATX — Ocean, in every dimension',
@@ -9,6 +10,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
   themeColor: '#030910',
 };
 
