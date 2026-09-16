@@ -1,0 +1,2 @@
+'use client';
+export function DepthSlider({value,onChange}:{value:number;onChange:(v:number)=>void}){return <div className="slider-control"><label htmlFor="depth">Depth plane <strong>{value.toLocaleString()} <small>m</small></strong></label><input id="depth" type="range" min="0" max="2000" step="10" value={value} onChange={e=>onChange(+e.target.value)}/><div className="range-labels"><span>Surface</span><span>2,000 m</span></div></div>}
