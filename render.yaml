@@ -1,21 +1,16 @@
 services:
-  - type: pserv
+  - type: web
     name: floatx-api
     runtime: python
-    plan: 1c-2g
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m uvicorn floatx.main:app --host 0.0.0.0 --port 8000
-    disk:
-      name: floatx-data
-      mountPath: /var/data
-      sizeGB: 1
+    startCommand: python -m uvicorn floatx.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10
       - key: FLOATX_DATA_DIR
-        value: /var/data/floatx
-      # AI generation stays disabled on an unauthenticated public demo.
+        value: ./data
       - key: FLOATX_AI_PROVIDER
         value: none
 
@@ -29,5 +24,5 @@ services:
       - key: ARGO_API_URL
         fromService:
           name: floatx-api
-          type: pserv
-          property: hostport
+          type: web
+          property: host
