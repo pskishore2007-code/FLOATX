@@ -6,7 +6,14 @@ from .models import Snapshot, Profile
 
 class ProfileStore:
     def __init__(self, root: str | None = None):
-        self.root = Path(root or os.getenv('FLOATX_DATA_DIR', './data'))
+        custom = os.getenv('FLOATX_DATA_DIR')
+        if custom:
+            self.root = Path(custom)
+        elif root:
+            self.root = Path(root)
+        else:
+            candidates = [Path('./data'), Path(__file__).resolve().parents[1] / 'data', Path(__file__).resolve().parents[2] / 'data']
+            self.root = next((c for c in candidates if (c / 'profiles.json').exists()), Path('./data'))
         self.path = self.root / 'profiles.json'
 
     def read(self) -> Snapshot:
