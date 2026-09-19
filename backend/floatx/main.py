@@ -1,7 +1,6 @@
 import os
-from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from .models import QueryRequest
@@ -17,8 +16,7 @@ context = ContextRAG(str(store.root / "chroma"))
 
 @app.get('/health')
 def health():
-    return {'status':'ok', 'service':'FLOATX', 'fastfloat':'configured' if engine.ready else 'waiting',
-            'floatx_engine':'active' if store.read().profiles else 'waiting', 'rag':context.state}
+    return {'status':'ok', 'service':'FLOATX', 'fastfloat':'configured' if engine.ready else 'waiting', 'rag':context.state}
 
 @app.get('/profiles')
 def profiles():

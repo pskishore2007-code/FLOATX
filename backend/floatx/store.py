@@ -6,14 +6,7 @@ from .models import Snapshot, Profile
 
 class ProfileStore:
     def __init__(self, root: str | None = None):
-        custom = os.getenv('FLOATX_DATA_DIR')
-        if custom:
-            self.root = Path(custom)
-        elif root:
-            self.root = Path(root)
-        else:
-            candidates = [Path('./data'), Path(__file__).resolve().parents[1] / 'data', Path(__file__).resolve().parents[2] / 'data']
-            self.root = next((c for c in candidates if (c / 'profiles.json').exists()), Path('./data'))
+        self.root = Path(root or os.getenv('FLOATX_DATA_DIR', './data'))
         self.path = self.root / 'profiles.json'
 
     def read(self) -> Snapshot:
@@ -29,7 +22,7 @@ class ProfileStore:
         existing = self.read()
         unique = {p.profile_id: p for p in existing.profiles}
         unique.update({p.profile_id: p for p in profiles})
-        snapshot = Snapshot(status='active' if unique else 'waiting', message='ARGO NetCDF observations loaded.' if unique else 'Waiting for ARGO data connection.', profiles=sorted(unique.values(), key=lambda p: p.timestamp), last_sync=datetime.now(timezone.utc) if unique else None)
+        snapshot = Snapshot(status='active' if unique else 'waiting', message='ARGO NetCDF observations loaded.' if unique else 'Waiting for ARGO data connection.', profiles=sorted(unique.values(), key=lambda p: p.timestamp), trajectories=existing.trajectories, source_files=existing.source_files, last_sync=datetime.now(timezone.utc) if unique else None)
         temporary = self.path.with_suffix('.tmp')
         temporary.write_text(snapshot.model_dump_json(indent=2), encoding='utf-8')
         temporary.replace(self.path)

@@ -31,7 +31,6 @@ def gradient(points, variable):
                 'Strongest supported salinity gradient' if best else 'Insufficient coverage or no qualifying gradient')
 
 def analyse(profiles,float_id):
-    from .floatx_engine import summarise_profile
     selected=sorted([p for p in profiles if p.float_id==float_id],key=lambda p:(p.timestamp,p.profile_id))
     columns=[]
     for p in selected[-24:]:
@@ -45,11 +44,9 @@ def analyse(profiles,float_id):
             variables[variable]=dict(gradient=gradient(points,variable),accepted_samples=len(points),
                 bins=[dict(index=i,top=i*25,bottom=(i+1)*25,value=mean(v),count=len(v)) for i,v in sorted(bins.items())])
         columns.append(dict(profile_id=p.profile_id,float_id=p.float_id,cycle=p.cycle,timestamp=p.timestamp.isoformat(),
-                            source=p.source,data_mode=p.data_mode,variables=variables,
-                            engine_summary=summarise_profile(p)))
+                            source=p.source,data_mode=p.data_mode,variables=variables))
     return dict(columns=columns,total_profiles=len(selected),bin_size=25,
-        method='FLOATX observed-profile engine (in-house implementation; not the unspecified FastFloat Engine). '
-        'QC 1 only for variable, pressure, position and time. Duplicate depths are averaged. '
+        method='QC 1 only for variable, pressure, position and time. Duplicate depths are averaged. '
         'Gradients: local linear regression in 30 m windows, centres every 5 m from 20–1000 m; '
         'at least 5 unique depths, 20 m span, no adjacent gap above 10 m. '
         'Thermocline candidate: strongest cooling slope at or below −0.02 °C/m. '
