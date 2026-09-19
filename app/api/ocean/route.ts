@@ -21,8 +21,14 @@ export async function GET() {
 
   // 2. Direct standalone fallback from local dataset snapshot
   try {
-    const filePath = path.join(process.cwd(), 'backend', 'data', 'profiles.json');
-    if (fs.existsSync(filePath)) {
+    const candidatePaths = [
+      path.join(process.cwd(), 'data', 'profiles.json'),
+      path.join(process.cwd(), 'backend', 'data', 'profiles.json'),
+      path.join(__dirname, '..', '..', '..', 'data', 'profiles.json'),
+      path.join(__dirname, '..', '..', '..', 'backend', 'data', 'profiles.json'),
+    ];
+    const filePath = candidatePaths.find(p => fs.existsSync(p));
+    if (filePath) {
       const content = await fs.promises.readFile(filePath, 'utf-8');
       const data = JSON.parse(content);
       return NextResponse.json(data);

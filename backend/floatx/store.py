@@ -8,6 +8,11 @@ class ProfileStore:
     def __init__(self, root: str | None = None):
         self.root = Path(root or os.getenv('FLOATX_DATA_DIR', './data'))
         self.path = self.root / 'profiles.json'
+        if not self.path.exists():
+            for alt in [Path('data/profiles.json'), Path('backend/data/profiles.json'), Path('../data/profiles.json')]:
+                if alt.exists():
+                    self.path = alt
+                    break
 
     def read(self) -> Snapshot:
         if not self.path.exists():
