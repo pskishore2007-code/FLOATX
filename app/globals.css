@@ -999,7 +999,18 @@ select{
   }
   .chart-grid{grid-template-columns:1fr;gap:18px}
   .provenance-section{grid-template-columns:1fr;gap:40px;padding:60px 6%}
-  .ocean-viewport{height:490px}
+  .ocean-viewport{height:520px}
+  .viewport-label{display:none!important}
+  .float-detail{
+    top:12px!important;
+    left:10px!important;
+    right:10px!important;
+    width:auto!important;
+    max-width:calc(100% - 20px)!important;
+    max-height:175px!important;
+    padding:10px 12px!important;
+    z-index:4!important;
+  }
 }
 
 @media(max-width:600px){
@@ -1099,24 +1110,42 @@ select{
   .explorer-toolbar{
     display:flex;
     flex-wrap:wrap;
-    gap:10px;
-    padding:14px 0;
+    gap:12px;
+    padding:16px 0 12px;
     justify-content:space-between;
+    align-items:center;
   }
   .region-control{flex:1 1 auto}
-  .sync-button{flex:0 0 auto;padding:6px 8px;font-size:11px}
+  .sync-button{flex:0 0 auto;padding:7px 10px;font-size:12px}
   .variable-tabs{
     order:3;
     width:100%;
-    margin-top:4px;
+    margin:8px 0 6px;
     display:flex;
-    gap:4px;
+    gap:8px;
+    background:#06141ce0;
+    padding:5px;
+    border-radius:10px;
+    border:1px solid #1c3d4c;
   }
   .variable-tabs button{
     flex:1;
     text-align:center;
-    padding:8px 4px;
-    font-size:12px;
+    padding:10px 8px;
+    font-size:13px;
+    font-weight:500;
+    border-radius:7px;
+    border:1px solid transparent;
+    color:#8fa9b6;
+    background:transparent;
+    transition:all .2s ease;
+  }
+  .variable-tabs button.active,[aria-pressed="true"].variable-tabs button,.variable-tabs button[aria-pressed="true"]{
+    color:var(--cyan);
+    background:#79e8d422;
+    border-color:#79e8d466;
+    font-weight:600;
+    box-shadow:0 2px 8px #79e8d420;
   }
 
   /* Ocean Viewport & Panels */
@@ -1125,31 +1154,25 @@ select{
     border:1px solid #1a3c48;
   }
   .viewport-label{
-    font-size:9px;
-    top:8px;
-    left:10px;
-    padding:5px 10px;
-    gap:6px;
-    border-radius:6px;
-    z-index:4;
+    display:none!important;
   }
   .viewport-bottom{font-size:8px;letter-spacing:.5px;bottom:8px;left:10px;right:10px}
   
   .float-detail{
     left:10px;
     right:10px;
-    top:48px;
+    top:12px;
     width:auto;
     max-width:calc(100% - 20px);
-    max-height:165px;
+    max-height:175px;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
-    padding:10px 12px;
-    background:#07151ef2;
+    padding:12px 14px;
+    background:#07151ef5;
     backdrop-filter:blur(16px);
     -webkit-backdrop-filter:blur(16px);
     box-shadow:0 8px 24px #000c;
-    z-index:3;
+    z-index:4;
   }
   .float-detail label{
     font-size:11px;
