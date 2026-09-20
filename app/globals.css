@@ -1121,30 +1121,54 @@ select{
 
   /* Ocean Viewport & Panels */
   .ocean-viewport{
-    height:500px;
+    height:520px;
     border:1px solid #1a3c48;
   }
-  .viewport-label{font-size:9px;top:10px;left:10px}
+  .viewport-label{
+    font-size:9px;
+    top:8px;
+    left:10px;
+    padding:5px 10px;
+    gap:6px;
+    border-radius:6px;
+    z-index:4;
+  }
   .viewport-bottom{font-size:8px;letter-spacing:.5px;bottom:8px;left:10px;right:10px}
   
   .float-detail{
     left:10px;
     right:10px;
-    top:34px;
+    top:48px;
     width:auto;
     max-width:calc(100% - 20px);
     max-height:165px;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
-    padding:12px 14px;
+    padding:10px 12px;
     background:#07151ef2;
     backdrop-filter:blur(16px);
     -webkit-backdrop-filter:blur(16px);
     box-shadow:0 8px 24px #000c;
+    z-index:3;
   }
-  .float-detail select{font-size:13px;padding:6px}
-  .float-detail h3{font-size:14px;margin:6px 0 4px}
-  .float-detail p{font-size:11px;margin:2px 0}
+  .float-detail label{
+    font-size:11px;
+    margin-bottom:4px;
+    display:block;
+  }
+  .float-detail select{
+    font-size:12px;
+    padding:6px 8px;
+    margin-bottom:8px;
+  }
+  .float-detail h3{
+    font-size:13px;
+    margin:4px 0 2px;
+  }
+  .float-detail p{
+    font-size:11px;
+    margin:2px 0;
+  }
 
   .depth-panel{
     width:auto;
