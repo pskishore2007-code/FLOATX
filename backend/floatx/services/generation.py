@@ -106,7 +106,13 @@ def answer(query, snapshot, rag):
                 f"Retrieved Profile Telemetry:\n{json.dumps(facts, indent=2)}\n\n"
                 "Provide a detailed, scientifically accurate oceanographic response:"
             )
-            models_to_try = ['gemini-3.1-flash-lite', 'gemini-3.5-flash']
+            models_to_try = [
+                'gemini-flash-lite-latest',
+                'gemini-3.5-flash-lite',
+                'gemini-3.6-flash',
+                'gemini-3.7-flash',
+                'gemini-3.1-flash-lite',
+            ]
             if config.get('model') and config['model'] not in models_to_try:
                 models_to_try.insert(0, config['model'])
 

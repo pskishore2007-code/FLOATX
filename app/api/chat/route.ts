@@ -258,7 +258,13 @@ async function generateAiAnswer(query: string, hits: any[], data: any) {
   // 1. Try Gemini first (active, verified, ultra-fast responses)
   if (geminiKey) {
     const promptText = `${instructions}\n\nQuestion: ${query}\n\nRetrieved Profile Metadata:\n${JSON.stringify(facts, null, 2)}\n\nProvide an authoritative, detailed oceanographic response:`;
-    const models = ['gemini-3.1-flash-lite', 'gemini-3.5-flash'];
+    const models = [
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.7-flash',
+      'gemini-3.1-flash-lite',
+    ];
 
     for (const m of models) {
       try {
