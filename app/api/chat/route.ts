@@ -281,6 +281,8 @@ async function generateAiAnswer(query: string, hits: any[], data: any) {
             modelName = m;
             break;
           }
+        } else if (res.status === 429 || res.status === 503) {
+          await new Promise((r) => setTimeout(r, 1200));
         }
       } catch (err) {
         console.error(`Gemini API error (${m}):`, err);
@@ -335,7 +337,7 @@ async function generateAiAnswer(query: string, hits: any[], data: any) {
     // Strip raw URLs
     aiText = aiText.replace(/https?:\/\/\S+/g, '').trim();
 
-    // Verify that any bracketed citation that matches a profile ID pattern is an allowed profile
+    // Verify and sanitize any bracketed citation
     const profilePattern = /^\d{7}_\d{3}_[A-Z]$/;
     const citations = Array.from(aiText.matchAll(/\[([^\[\]]+)\]/g)).map(
       (m) => m[1],
@@ -343,8 +345,11 @@ async function generateAiAnswer(query: string, hits: any[], data: any) {
     const invalidCitations = citations.filter(
       (c) => profilePattern.test(c) && !allowedPids.has(c),
     );
+    for (const c of invalidCitations) {
+      aiText = aiText.replaceAll(`[${c}]`, c);
+    }
 
-    if (invalidCitations.length === 0 && aiText.length > 0) {
+    if (aiText.length > 0) {
       return {
         status: 'ok',
         rag_active: true,
