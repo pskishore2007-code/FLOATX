@@ -9,18 +9,20 @@ const REGIONS: Record<string, [number, number, number, number]> = {
   'Arabian Sea': [50.0, 80.0, 0.0, 26.0],
 };
 
+let _cachedSnapshot: any = null;
+
 function getSnapshot() {
+  if (_cachedSnapshot) return _cachedSnapshot;
   const candidatePaths = [
     path.join(process.cwd(), 'data', 'profiles.json'),
     path.join(process.cwd(), 'backend', 'data', 'profiles.json'),
-    path.join(__dirname, '..', '..', '..', 'data', 'profiles.json'),
-    path.join(__dirname, '..', '..', '..', 'backend', 'data', 'profiles.json'),
   ];
   const filePath = candidatePaths.find((p) => fs.existsSync(p));
   if (!filePath) return null;
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(raw);
+    _cachedSnapshot = JSON.parse(raw);
+    return _cachedSnapshot;
   } catch {
     return null;
   }
@@ -402,27 +404,30 @@ export async function POST(request: Request) {
     );
   }
 
-  // 1. Try Python service if running
-  try {
-    const response = await fetch(
-      `${process.env.ARGO_API_URL || 'http://127.0.0.1:8000'}/query`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: body.query, mode }),
-        signal: AbortSignal.timeout(25000),
-      },
-    );
-    if (response.ok) {
-      const data = await response.json();
-      if (data && (data.status === 'ok' || data.generated)) {
-        return NextResponse.json(data, {
-          status: response.status,
-        });
+  // 1. Try Python service only if configured or in local development
+  const argoUrl = process.env.ARGO_API_URL;
+  if (argoUrl || process.env.NODE_ENV !== 'production') {
+    try {
+      const response = await fetch(
+        `${argoUrl || 'http://127.0.0.1:8000'}/query`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: body.query, mode }),
+          signal: AbortSignal.timeout(2000),
+        },
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data && (data.status === 'ok' || data.generated)) {
+          return NextResponse.json(data, {
+            status: response.status,
+          });
+        }
       }
+    } catch {
+      // Python service unreachable or timed out, use local standalone fallback
     }
-  } catch {
-    // Python service unreachable or timed out, use local standalone fallback
   }
 
   // 2. Standalone fallback using cached dataset
