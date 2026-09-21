@@ -1,4 +1,4 @@
-import argparse,hashlib,json,os,threading,time
+import argparse,json,threading,time
 from datetime import datetime,timezone
 from pathlib import Path
 import httpx
@@ -6,6 +6,7 @@ from .services.discovery import INDEX_URL,REGIONS,candidates
 from .services.gdac import source_url,read_profiles,MAX_BYTES
 from .services.trajectory import read_trajectory
 from .store import ProfileStore
+from .files import sha256_file
 
 def download(url,path,limit):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -20,22 +21,22 @@ def download(url,path,limit):
                     f.write(chunk)
         temp.replace(path)
     finally:temp.unlink(missing_ok=True)
-    return {'url':url,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size,'retrieved_at':datetime.now(timezone.utc).isoformat()}
+    return {'url':url,'sha256':sha256_file(path),'bytes':path.stat().st_size,'retrieved_at':datetime.now(timezone.utc).isoformat()}
 
 def sync_recent(index_path=None,progress=lambda message:None,offline=False):
     store=ProfileStore();root=store.root;cache=root/'netcdf';root.mkdir(parents=True,exist_ok=True)
     def fetch(url,path,limit):
         if not offline:return download(url,path,limit)
-        return {'url':url,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size,'cached_file':True}
+        return {'url':url,'sha256':sha256_file(path),'bytes':path.stat().st_size,'cached_file':True}
     progress('Reading official GDAC profile index…')
     if index_path is None:
         index_path=root/'ar_index_global_prof.txt.gz'
         if index_path.exists() and time.time()-index_path.stat().st_mtime<3600:
-            index_source={'url':INDEX_URL,'sha256':hashlib.sha256(index_path.read_bytes()).hexdigest(),'bytes':index_path.stat().st_size,'cached_index':True,'index_cached_at':datetime.fromtimestamp(index_path.stat().st_mtime,timezone.utc).isoformat()}
+            index_source={'url':INDEX_URL,'sha256':sha256_file(index_path),'bytes':index_path.stat().st_size,'cached_index':True,'index_cached_at':datetime.fromtimestamp(index_path.stat().st_mtime,timezone.utc).isoformat()}
         else:
             index_source=download(INDEX_URL,index_path,96*1024*1024)
     else:
-        index_source={'url':INDEX_URL,'sha256':hashlib.sha256(index_path.read_bytes()).hexdigest(),'bytes':index_path.stat().st_size,'cached_index':True}
+        index_source={'url':INDEX_URL,'sha256':sha256_file(index_path),'bytes':index_path.stat().st_size,'cached_index':True}
     discovered=candidates(index_path)
     additions=[];events=[];sources=[index_source];report=[];warnings=[]
     for region,groups in discovered.items():
@@ -68,7 +69,7 @@ def sync_recent(index_path=None,progress=lambda message:None,offline=False):
     records={(r.source,r.record_index):r for r in existing.trajectories};records.update({(r.source,r.record_index):r for r in events})
     lineage={r['url']:r for r in existing.source_files};lineage.update({r['url']:r for r in sources})
     snapshot=existing.model_copy(update={'status':'active','message':'Official GDAC observations loaded. Dates vary by float; historical demo retained.','profiles':sorted(unique.values(),key=lambda p:p.timestamp),'trajectories':sorted(records.values(),key=lambda r:r.timestamp),'last_sync':datetime.now(timezone.utc),'dataset_label':'GDAC index discovery · Bay of Bengal + Arabian Sea · historical demo retained','source_files':list(lineage.values())})
-    temp=store.path.with_suffix('.tmp');temp.write_text(snapshot.model_dump_json(),encoding='utf-8');temp.replace(store.path)
+    temp=store.path.with_suffix('.tmp');temp.write_text(snapshot.model_dump_json(),encoding='utf-8');temp.replace(store.path);store.invalidate()
     return {'regions':report,'warnings':warnings,'profiles_added':len(additions),'trajectory_records_added':len(events),'index_source':index_source}
 
 _lock=threading.Lock()

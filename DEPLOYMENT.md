@@ -3,11 +3,11 @@
 ## Working now
 
 http://127.0.0.1:3000/ — local Next.js website, Python API on port 8000.
-Real ARGO observations, Chroma retrieval and NOAA September climatology remain cached.
+Real ARGO observations, memory-bounded semantic retrieval and NOAA climatology remain available.
 
 ## AI answers
 
-The AI answer tab uses OpenAI Responses API with up to four Chroma-retrieved
+The AI answer tab uses the configured AI provider with up to four locally retrieved
 profile summaries. Set OPENAI_API_KEY and FLOATX_AI_MODEL as environment variables
 on the Python process, then restart it. Choose a model your API account supports.
 No API key or model is provided, and no real generation call has been tested.
@@ -28,7 +28,7 @@ fast_float number-parsing library has been substituted.
 
 Render supports Next.js web services and Python services. Use a private Python
 service with persistent disk and a Next.js web service connected over Render's
-private network. The Python data directory must persist ARGO, NOAA and Chroma.
+private network. The Python data directory should persist ARGO and NOAA caches.
 Persistent disks require a paid Render service. No account or paid resources
 have been created. Before exposing AI publicly, add authentication and per-user
 quotas; the current single-generation concurrency bound is not a billing limit.
@@ -42,11 +42,11 @@ Backend build: pip install -r requirements.txt
 Backend start: python -m uvicorn floatx.main:app --host 0.0.0.0 --port 8000
 Backend runtime FLOATX_DATA_DIR: /var/data/floatx
 Mount persistent storage at /var/data. Use one worker for the current in-process
-sync locks and Chroma cache. Transfer the validated local data cache to the disk
+sync locks and scientific data caches. Transfer the validated local data cache to the disk
 or use the bounded ARGO sync; NOAA downloads are available from the UI.
 
 Sites hosting is not used because its Worker-compatible runtime cannot run this
-Python/NetCDF/Chroma backend without a separate hosted Python service. The required
+Python/NetCDF backend without a separate hosted Python service. The required
 stack has been preserved. Hosting commands are instructions, not a tested deployment.
 
 Sources: https://render.com/docs/disks and https://render.com/docs/deploy-nextjs-app

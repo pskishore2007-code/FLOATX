@@ -1,12 +1,10 @@
-import os
 from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
 from .models import QueryRequest
 from .store import ProfileStore
 from .services.fastfloat import FastFloatEngine
-from .services.query import parse_query
 from .services.rag import ContextRAG
 
 app = FastAPI(title='FLOATX ARGO Data Service', version='0.1.0')
@@ -20,6 +18,11 @@ def health():
 
 @app.get('/profiles')
 def profiles():
+    # The snapshot is already validated when written. Serving the file directly
+    # avoids a 36 MB string, a large Pydantic graph and another JSON copy being
+    # alive together for the dashboard's most frequent request.
+    if store.path.exists():
+        return FileResponse(store.path, media_type='application/json')
     return store.read().model_dump(mode='json')
 
 @app.post('/query')
@@ -37,14 +40,14 @@ def query(request: QueryRequest):
 def anomalies():
     return {'status':'waiting', 'events':[], 'message':'No validated seasonal climatology is loaded. No anomaly analysis has run.'}
 
-from .recent_sync import status as sync_status, run_background
-
 @app.get("/sync")
 def get_sync():
-    return sync_status()
+    from .recent_sync import status
+    return status()
 
 @app.post("/sync", status_code=202)
 def start_sync():
+    from .recent_sync import run_background
     return run_background()
 
 @app.get('/analysis')
@@ -58,10 +61,9 @@ def regional_comparison(request: ComparisonRequest):
     return compare(store.read(), request)
 
 from fastapi import HTTPException
-from .services import woa
-
 @app.get('/baseline')
 def baseline_profile(profile_id: str):
+    from .services import woa
     profile = next((p for p in store.read().profiles if p.profile_id == profile_id), None)
     if profile is None: raise HTTPException(404, 'ARGO profile not found')
     return woa.compare(store.root / 'baseline', profile)
@@ -69,6 +71,7 @@ def baseline_profile(profile_id: str):
 @app.post('/baseline', status_code=202)
 def baseline_sync(profile_id: str):
     from datetime import timezone
+    from .services import woa
     profile = next((p for p in store.read().profiles if p.profile_id == profile_id), None)
     if profile is None: raise HTTPException(404, 'ARGO profile not found')
     return woa.start(store.root / 'baseline', profile.timestamp.astimezone(timezone.utc).month)
