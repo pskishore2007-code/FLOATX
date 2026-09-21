@@ -1,19 +1,24 @@
-"""Local semantic retrieval of versioned ARGO profile summaries in Chroma.
+"""Memory-bounded semantic retrieval over ARGO profile summaries.
 
-Numerical constraints are deliberately not executed by nearest-neighbour search.
-Returned citations and profile fields are resolved against the current snapshot.
+The original implementation loaded Chroma, ONNX Runtime and a MiniLM model into
+the API process. That stack can exceed a 512 MiB container once the ARGO
+snapshot is also materialised. This module keeps the same public API and
+ranking contract, but uses a small deterministic hashing vectorizer by default.
 """
 import hashlib
-import os
+import math
+import re
 import threading
-from pathlib import Path
 from .query import REGIONS
 
-MODEL = 'all-MiniLM-L6-v2'
-METHOD = ('Local MiniLM embeddings + Chroma cosine search over cached profile summaries. '
+MODEL = 'floatx-hash-v1'
+DIMENSIONS = 256
+TOKEN = re.compile(r"[a-z0-9]+")
+METHOD = ('Memory-bounded hashed semantic retrieval over cached profile summaries. '
           'Ranked context candidates only: similarity is not confidence, and dates, depths and '
           'numeric conditions in your question are not filters here. Use Exact profiles for filters. '
           'No generated scientific answer, anomaly calculation or FastFloat execution is performed.')
+
 
 def documents(snapshot):
     result = []
@@ -34,18 +39,52 @@ def documents(snapshot):
         result.append((p.profile_id,text))
     return result
 
+
 def fingerprint(snapshot):
-    # Include measurements and provenance: changed cache content cannot use old citations.
-    return hashlib.sha256((MODEL+'v1'+snapshot.model_dump_json()).encode()).hexdigest()[:24]
+    """Hash a snapshot incrementally without allocating snapshot-sized JSON."""
+    digest = hashlib.sha256((MODEL + 'v2').encode())
+    for p in sorted(snapshot.profiles, key=lambda value: value.profile_id):
+        digest.update(f'{p.profile_id}|{p.source}|{p.timestamp.isoformat()}|'.encode())
+        for sample in p.samples:
+            digest.update((f'{sample.depth:.6g}|{sample.pressure:.6g}|{sample.temperature}|'
+                           f'{sample.salinity}|{sample.pressure_qc}|{sample.temperature_qc}|'
+                           f'{sample.salinity_qc};').encode())
+    return digest.hexdigest()[:24]
+
+
+def hashed_embedding(texts):
+    vectors = []
+    for text in texts:
+        vector = [0.0] * DIMENSIONS
+        for token in TOKEN.findall(text.lower()):
+            raw = hashlib.blake2b(token.encode(), digest_size=8).digest()
+            value = int.from_bytes(raw, 'little')
+            vector[value % DIMENSIONS] += 1.0 if value & 1 else -1.0
+        norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+        vectors.append([value / norm for value in vector])
+    return vectors
+
+
+def cosine_distance(left, right):
+    if len(left) != len(right):
+        raise ValueError('Embedding dimensions do not match')
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if not left_norm or not right_norm:
+        return 1.0
+    similarity = sum(a * b for a, b in zip(left, right)) / (left_norm * right_norm)
+    return 1.0 - max(-1.0, min(1.0, similarity))
+
 
 class ContextRAG:
     def __init__(self, root, embedding=None):
+        # root remains accepted for backwards compatibility with deployments.
         self.root = str(root)
-        self.embedding = embedding
-        self.client = None
+        self.embedding = embedding or hashed_embedding
         self.lock = threading.Lock()
         self.job = threading.Lock()
-        self.state = {'status':'waiting','message':'Local semantic index has not been opened.'}
+        self.index = None
+        self.state = {'status':'waiting','message':'Memory-bounded semantic index has not been built.'}
 
     def request(self, query, snapshot):
         if not query.strip() or len(query)>600 or not snapshot.profiles or snapshot.status=='error':
@@ -57,54 +96,42 @@ class ContextRAG:
             def work():
                 try:
                     self.build(snapshot)
-                    # Warm the query model even when a persistent index already exists.
-                    if self.state.get('status')=='ready':
-                        self.embedding(['ocean profile'])
                 finally:
                     self.job.release()
             threading.Thread(target=work,daemon=True).start()
         return {'status':'indexing','profiles':[], 'rag_active':False,
                 'explanation':(previous['message']+' Retrying. ' if previous.get('status')=='error' else '')+
-                'Preparing the local semantic index. Submit again shortly; exact queries remain available.',
+                'Preparing the memory-bounded semantic index. Submit again shortly; exact queries remain available.',
                 'method':METHOD}
-
-    def _open(self):
-        if self.client is None:
-            import chromadb
-            from chromadb.config import Settings
-            self.client = chromadb.PersistentClient(path=self.root, settings=Settings(anonymized_telemetry=False))
-        if self.embedding is None:
-            from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
-            self.embedding = ONNXMiniLM_L6_V2(preferred_providers=['CPUExecutionProvider'])
 
     def build(self, snapshot):
         with self.lock:
             try:
-                if snapshot.status == 'error' or not documents(snapshot):
-                    self.state = {'status':'empty','message':'No valid cached profiles to index.'}
-                    return self.state
-                self.state = {'status':'indexing','message':'Building local profile embeddings; retry shortly.'}
-                self._open()
-                name = 'argo-'+fingerprint(snapshot)
                 docs = documents(snapshot)
-                collection = self.client.get_or_create_collection(name, embedding_function=None,
-                            metadata={'hnsw:space':'cosine','complete':False,'model':MODEL})
-                if not (collection.metadata.get('complete') and collection.count() == len(docs)):
-                    for offset in range(0,len(docs),32):
-                        batch=docs[offset:offset+32]
-                        vectors=self.embedding([text for _,text in batch])
-                        collection.upsert(ids=[id for id,_ in batch], documents=[text for _,text in batch],
-                                          embeddings=vectors)
-                    collection.modify(metadata={'complete':True,'model':MODEL})
-                self.state={'status':'ready','message':'Local semantic index ready.',
+                if snapshot.status == 'error' or not docs:
+                    self.index = None
+                    self.state = {'status':'empty','message':'No valid cached profiles to index.'}
+                    return dict(self.state)
+                self.state = {'status':'indexing','message':'Building profile vectors; retry shortly.'}
+                vectors = []
+                for offset in range(0, len(docs), 32):
+                    batch = docs[offset:offset + 32]
+                    embedded = self.embedding([text for _, text in batch])
+                    if len(embedded) != len(batch):
+                        raise ValueError('Embedding provider returned the wrong number of vectors')
+                    vectors.extend(embedded)
+                name = 'argo-' + fingerprint(snapshot)
+                self.index = {'name': name, 'ids': [identifier for identifier, _ in docs], 'vectors': vectors}
+                self.state={'status':'ready','message':'Memory-bounded semantic index ready.',
                             'index':name,'profile_count':len(docs),'model':MODEL}
             except Exception as exc:
+                self.index = None
                 self.state={'status':'error','message':f'Local index unavailable ({type(exc).__name__}). '
                             'Exact profile queries remain available. Retry semantic search to rebuild.'}
             return dict(self.state)
 
     def retrieve(self, query, snapshot, limit=4):
-        base={'profiles':[], 'engine':'Chroma local semantic retrieval','rag_active':False,
+        base={'profiles':[], 'engine':'FLOATX memory-bounded semantic retrieval','rag_active':False,
               'method':METHOD,'last_sync':snapshot.last_sync.isoformat() if snapshot.last_sync else None}
         if not query.strip() or len(query)>600:
             return dict(base,status='unsupported',explanation='Enter a semantic question of 1–600 characters.')
@@ -115,27 +142,27 @@ class ContextRAG:
             if self.lock.locked():
                 return dict(base,status='indexing',explanation='Local index is building. Retry shortly; exact queries remain available.')
             self.build(snapshot)
-        if self.state.get('status') != 'ready' or self.state.get('index') != expected:
+        if self.state.get('status') != 'ready' or self.state.get('index') != expected or self.index is None:
             return dict(base,status='unavailable',explanation=self.state['message'])
         try:
+            query_vector = self.embedding([query])[0]
             with self.lock:
-                collection=self.client.get_collection(expected,embedding_function=None)
-                result=collection.query(query_embeddings=self.embedding([query]),
-                        n_results=min(limit,collection.count()),include=['distances'])
+                ranked = sorted(zip(self.index['ids'], self.index['vectors']),
+                                key=lambda item: cosine_distance(query_vector, item[1]))[:limit]
             by_id={p.profile_id:p for p in snapshot.profiles}
             hits=[]
-            for id,distance in zip(result['ids'][0],result['distances'][0]):
-                p=by_id.get(id)
+            for identifier, vector in ranked:
+                p=by_id.get(identifier)
                 if p is None or not p.samples:
                     continue
-                hits.append(dict(profile_id=id,float_id=p.float_id,cycle=p.cycle,
+                hits.append(dict(profile_id=identifier,float_id=p.float_id,cycle=p.cycle,
                     timestamp=p.timestamp.isoformat(),source=p.source,latitude=p.latitude,longitude=p.longitude,
                     data_mode=p.data_mode,position_qc=p.position_qc,time_qc=p.time_qc,
                     matching_samples=len(p.samples),min_depth=min(s.depth for s in p.samples),
                     max_depth=max(s.depth for s in p.samples),focus_depth=min(s.depth for s in p.samples),
-                    distance=round(distance,4)))
+                    distance=round(cosine_distance(query_vector, vector),4)))
             return dict(base,status='ok',rag_active=True,profiles=hits,index=self.state,
-                        explanation=f'{len(hits)} nearest profile summaries from {collection.count()} indexed profiles. '
+                        explanation=f'{len(hits)} nearest profile summaries from {len(self.index["ids"])} indexed profiles. '
                         'These are context candidates, not a scientific answer or an exhaustive filtered result.')
         except Exception as exc:
             return dict(base,status='unavailable',explanation=f'Semantic retrieval failed ({type(exc).__name__}). '

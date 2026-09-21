@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m uvicorn floatx.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m uvicorn floatx.main:app --host 0.0.0.0 --port $PORT --workers 1 --limit-concurrency 20 --timeout-keep-alive 5
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10
@@ -13,6 +13,12 @@ services:
         value: ./data
       - key: FLOATX_AI_MODEL
         value: gemini-3.1-flash-lite
+      - key: OPENBLAS_NUM_THREADS
+        value: 1
+      - key: OMP_NUM_THREADS
+        value: 1
+      - key: MALLOC_ARENA_MAX
+        value: 2
       - key: GEMINI_API_KEY
         sync: false
       - key: XAI_API_KEY

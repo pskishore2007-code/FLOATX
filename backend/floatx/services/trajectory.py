@@ -14,9 +14,12 @@ def read_trajectory(path: Path, source: str, cycles: set[int]):
     source_url(source)
     records = []
     with xr.open_dataset(path, engine='netcdf4') as ds:
-        ds.load()
         wmo = chars(ds.PLATFORM_NUMBER.values)
-        for i in np.flatnonzero(np.isin(ds.CYCLE_NUMBER.values, list(cycles))):
+        # Only materialise the one-dimensional cycle selector. ds.load() used
+        # to force every trajectory variable into memory, including records
+        # that are discarded below.
+        cycle_numbers = ds.CYCLE_NUMBER.values
+        for i in np.flatnonzero(np.isin(cycle_numbers, list(cycles))):
             row = ds.isel(N_MEASUREMENT=i)
             def flag(name):
                 return chars(row[name].values) if name in row else '9'

@@ -1,6 +1,5 @@
 """Reproducible REAL historical Bay of Bengal subset. No synthetic fallback."""
 import argparse
-import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 import httpx
@@ -8,6 +7,7 @@ from .models import Snapshot
 from .services.gdac import read_profiles, MAX_BYTES
 from .services.trajectory import read_trajectory
 from .store import ProfileStore
+from .files import sha256_file
 
 BASE = 'https://data-argo.ifremer.fr/dac/incois/2902086/'
 FILES = ['2902086_prof.nc', '2902086_Rtraj.nc']
@@ -31,7 +31,7 @@ def sync(cache: Path, offline=False):
                 temp.replace(path)
             finally:
                 temp.unlink(missing_ok=True)
-        sources.append({'url':BASE+name,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':path.stat().st_size})
+        sources.append({'url':BASE+name,'sha256':sha256_file(path),'bytes':path.stat().st_size})
     profiles=[p for p in read_profiles(cache/FILES[0],BASE+FILES[0]) if 5<=p.latitude<=23 and 80<=p.longitude<=100]
     profiles=sorted(profiles,key=lambda p:p.timestamp)[-24:]
     if not profiles: raise ValueError('No usable Bay of Bengal profiles. Existing snapshot retained.')
@@ -43,6 +43,7 @@ def sync(cache: Path, offline=False):
     temp=store.path.with_suffix('.tmp')
     temp.write_text(snapshot.model_dump_json(),encoding='utf-8')
     temp.replace(store.path)
+    store.invalidate()
     return snapshot
 
 if __name__=='__main__':

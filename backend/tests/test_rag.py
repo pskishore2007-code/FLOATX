@@ -13,7 +13,7 @@ def snapshot():
 def embed(texts):
     return [[1.,0.,0.] if 'Arabian' in text else [0.,1.,0.] for text in texts]
 
-def test_real_chroma_ranking_and_canonical_citations(tmp_path):
+def test_memory_bounded_ranking_and_canonical_citations(tmp_path):
     service=ContextRAG(tmp_path/'chroma',embedding=embed)
     s=snapshot(); result=service.retrieve('Arabian salinity',s)
     assert result['status']=='ok',result

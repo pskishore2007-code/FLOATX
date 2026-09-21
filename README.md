@@ -39,7 +39,7 @@ For edits use `npm run dev` instead of `npm run start`. Copy `.env.example` to `
 - FloatChat input and inspectable query-plan API, with an explicit unavailable scientific answer until execution and RAG are connected.
 - Region comparison shell, anomaly waiting state, real counters, and Data Pulse.
 - Python API, validated snapshot store, bounded GDAC NetCDF transport/reader, adjusted-variable selection, QC filtering, TEOS-10 pressure-to-depth conversion, and an explicit ingestion CLI.
-- FastFloat compatibility adapter and Chroma vector context adapter. Neither is reported as an active integration.
+- FastFloat compatibility adapter and a memory-bounded hashed semantic context adapter. Neither is reported as an active integration until used.
 
 ## Data integrity
 
@@ -68,7 +68,7 @@ Also finish matched-window region statistics/time trends, progressive pagination
 
 **FastFloat blocker:** the problem-statement image was not available in the conversation. No verifiable official FastFloat ocean-engine package/API was identified. `FASTFLOAT_MODULE` preserves the required integration point (`query` and `process_profiles`) without installing an unrelated similarly named package or replacing the engine. Confirm its official specification before implementing the binding.
 
-**RAG:** Chroma is installed. Configure an explicit embedding provider and index attributed scientific documentation into `argo-scientific-context`; the retrieval adapter is prepared but no embeddings or answer pipeline are active.
+**Semantic retrieval:** the API uses a bounded, deterministic hashing vectorizer over attributed ARGO profile summaries. It avoids loading an ONNX model or a vector database in the 512 MB Render process. Exact filters remain the scientific path for dates, depths and numeric constraints.
 
 ## Files created
 
@@ -95,7 +95,7 @@ package.json, package-lock.json, tsconfig.json, next.config.ts
 
 Frontend: Next.js 16.3.4, React/React DOM 19.2.8, React Three Fiber 9.7.0, Drei 10.7.8, Three.js 0.180.0, Lucide React 0.468.0, TypeScript 5.9.3 and type packages. Exact versions are in `package-lock.json`.
 
-Python: FastAPI, Uvicorn, HTTPX, Pydantic, NumPy, Xarray, netCDF4, GSW, Chroma and pytest. Exact versions are in `backend/requirements.lock.txt`.
+Python runtime: FastAPI, Uvicorn, HTTPX, Pydantic, NumPy, Xarray, netCDF4 and GSW. Pytest is development-only. Exact versions are in `backend/requirements.lock.txt`.
 
 ## Verification
 

@@ -1,5 +1,4 @@
 """Monthly WOA23 1991–2020 departures; no heatwave classification."""
-import hashlib
 import json
 import math
 import threading
@@ -10,6 +9,7 @@ import httpx
 import numpy as np
 import xarray as xr
 from .analysis import good
+from ..files import sha256_file
 
 LOCK = threading.RLock()
 JOBS = {}
@@ -44,7 +44,12 @@ def validate(file, variable, month):
             raise ValueError('Unexpected climatology period')
         for name in ('lat', 'lon', 'depth', code + '_an'):
             if name not in ds: raise ValueError('Missing climatology variable: ' + name)
-        if not np.isfinite(ds[code + '_an'].isel(time=0).values).any():
+        field = ds[code + '_an'].isel(time=0)
+        # Reading the full 1-degree global field can allocate hundreds of MB.
+        # Validate bounded depth slabs and stop as soon as real data is found.
+        depth_count = field.sizes.get('depth', 1)
+        if not any(np.isfinite(field.isel(depth=slice(offset, offset + 4)).values).any()
+                   for offset in range(0, depth_count, 4)):
             raise ValueError('No finite climatology values')
         return ds.attrs['title']
 
@@ -73,7 +78,7 @@ def sync(root, month):
                     tmp.unlink(missing_ok=True)
             with LOCK: title = validate(target, variable, month)
             files.append(dict(variable=variable, source=url(variable, month), title=title,
-                              sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
+                              sha256=sha256_file(target)))
         result = dict(status='ready', month=month, last_successful_sync=datetime.now(timezone.utc).isoformat(), files=files)
         with LOCK:
             temp = root / f'{month:02d}.tmp'
