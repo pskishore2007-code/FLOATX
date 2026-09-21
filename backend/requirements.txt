@@ -8,5 +8,3 @@ netCDF4>=1.7,<2
 gsw>=3.6,<4
 chromadb>=1,<2
 pytest>=8,<10
-
-python-dotenv>=1,<2

@@ -1,2 +1,5 @@
-import FloatX from '@/components/FloatX';
-export default function Page(){return <FloatX/>}
+import { LandingPage } from '@/components/LandingPage';
+
+export default function Page() {
+  return <LandingPage />;
+}

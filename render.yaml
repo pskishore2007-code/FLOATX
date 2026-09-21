@@ -11,8 +11,10 @@ services:
         value: 3.12.10
       - key: FLOATX_DATA_DIR
         value: ./data
-      - key: FLOATX_AI_PROVIDER
-        value: none
+      - key: FLOATX_AI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: GEMINI_API_KEY
+        sync: false
 
   - type: web
     name: floatx-web
@@ -23,3 +25,5 @@ services:
     envVars:
       - key: ARGO_API_URL
         value: https://floatx-api.onrender.com
+      - key: GEMINI_API_KEY
+        sync: false
