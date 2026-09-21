@@ -15,6 +15,10 @@ services:
         value: gemini-3.1-flash-lite
       - key: GEMINI_API_KEY
         sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: GROK_API_KEY
+        sync: false
 
   - type: web
     name: floatx-web
@@ -26,4 +30,8 @@ services:
       - key: ARGO_API_URL
         value: https://floatx-api.onrender.com
       - key: GEMINI_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: GROK_API_KEY
         sync: false

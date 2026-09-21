@@ -201,6 +201,25 @@ function executeExactQuery(query: string, profiles: any[]) {
   };
 }
 
+function getXaiApiKey(): string | null {
+  if (process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
+  if (process.env.GROK_API_KEY) return process.env.GROK_API_KEY;
+  try {
+    const envPaths = [
+      path.join(process.cwd(), 'backend', '.env'),
+      path.join(process.cwd(), '.env'),
+    ];
+    for (const p of envPaths) {
+      if (fs.existsSync(p)) {
+        const text = fs.readFileSync(p, 'utf-8');
+        const match = text.match(/(?:XAI_API_KEY|GROK_API_KEY)\s*=\s*([^\r\n]+)/);
+        if (match && match[1].trim()) return match[1].trim();
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function getGeminiApiKey(): string | null {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
   try {
@@ -220,13 +239,14 @@ function getGeminiApiKey(): string | null {
 }
 
 async function generateAiAnswer(query: string, hits: any[], data: any) {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
+  const geminiKey = getGeminiApiKey();
+  const xaiKey = getXaiApiKey();
+  if (!geminiKey && !xaiKey) {
     return {
       status: 'ok',
       rag_active: true,
       profiles: hits,
-      explanation: `${hits.length} candidate profiles retrieved for "${query}". Set GEMINI_API_KEY in server environment to enable generative AI answers. All matching observation profiles and depth curves are available below.`,
+      explanation: `${hits.length} candidate profiles retrieved for "${query}". Set GEMINI_API_KEY or GROK_API_KEY in server environment to enable generative AI answers. All matching observation profiles and depth curves are available below.`,
       method: 'Local semantic context retrieval over cached observations.',
       last_sync: data.last_sync || null,
     };
@@ -255,33 +275,77 @@ async function generateAiAnswer(query: string, hits: any[], data: any) {
     '4. Present answers in well-structured paragraphs or bullet points.\n' +
     '5. Do NOT invent fabricated profile IDs. Do NOT output raw external URLs or web links.';
 
-  const promptText = `${instructions}\n\nQuestion: ${query}\n\nRetrieved Profile Metadata:\n${JSON.stringify(facts, null, 2)}\n\nProvide an authoritative, detailed oceanographic response:`;
-
-  const models = ['gemini-3.1-flash-lite'];
   let aiText = '';
+  let providerName = 'Google Gemini API';
+  let modelName = 'gemini-3.1-flash-lite';
 
-  for (const m of models) {
+  // 1. Try xAI Grok if key present
+  if (xaiKey) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
+      const grokRes = await fetch('https://api.x.ai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${xaiKey}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: { maxOutputTokens: 1500, temperature: 0.2 },
+          model: 'grok-beta',
+          messages: [
+            { role: 'system', content: instructions },
+            {
+              role: 'user',
+              content: `Question: ${query}\n\nRetrieved Profile Telemetry:\n${JSON.stringify(facts, null, 2)}\n\nProvide an authoritative, detailed oceanographic response:`,
+            },
+          ],
+          max_tokens: 1500,
+          temperature: 0.2,
         }),
-        signal: AbortSignal.timeout(25000),
+        signal: AbortSignal.timeout(20000),
       });
-      if (res.ok) {
-        const payload = await res.json();
-        const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          aiText = text;
-          break;
+      if (grokRes.ok) {
+        const payload = await grokRes.json();
+        const text = payload.choices?.[0]?.message?.content;
+        if (text && text.trim()) {
+          aiText = text.trim();
+          providerName = 'xAI Grok';
+          modelName = 'grok-beta';
         }
       }
     } catch (err) {
-      console.error(`Gemini API error (${m}):`, err);
+      console.warn('xAI Grok API error, trying Gemini fallback:', err);
+    }
+  }
+
+  // 2. Try Gemini if aiText is empty and key is present
+  if (!aiText && geminiKey) {
+    const promptText = `${instructions}\n\nQuestion: ${query}\n\nRetrieved Profile Metadata:\n${JSON.stringify(facts, null, 2)}\n\nProvide an authoritative, detailed oceanographic response:`;
+    const models = ['gemini-3.1-flash-lite', 'gemini-3.5-flash'];
+
+    for (const m of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: { maxOutputTokens: 1500, temperature: 0.2 },
+          }),
+          signal: AbortSignal.timeout(25000),
+        });
+        if (res.ok) {
+          const payload = await res.json();
+          const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            aiText = text;
+            providerName = 'Google Gemini API';
+            modelName = m;
+            break;
+          }
+        }
+      } catch (err) {
+        console.error(`Gemini API error (${m}):`, err);
+      }
     }
   }
 
@@ -315,8 +379,8 @@ async function generateAiAnswer(query: string, hits: any[], data: any) {
           'FloatChat Oceanographic Synthesis (Gemini AI). Observational citations validated against active ARGO NetCDF telemetry.',
         generation: {
           configured: true,
-          provider: 'Google Gemini API',
-          model: 'gemini-3.1-flash-lite',
+          provider: providerName,
+          model: modelName,
         },
         last_sync: data.last_sync || null,
       };
